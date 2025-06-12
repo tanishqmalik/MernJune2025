@@ -1,39 +1,82 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors')
-const dotenv = require('dotenv')
-const authRoutes = require('./routes/auth');
-const productRoutes = require('./routes/product')
+const cors = require('cors');
+const dotenv = require('dotenv');
+const authRoutes = require('./routes/authRoutes');
+const productRoutes = require('./routes/productRoutes');
 
 dotenv.config();
 
 const app = express();
 
-// Simple CORS configuration
-app.use(cors());
+// CORS configuration
+const corsOptions = {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 86400 // 24 hours
+};
 
-// Add headers middleware
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
+// Body parser middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Debug Middleware: Log incoming requests
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
+    console.log(`--> ${req.method} ${req.path}`);
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
     next();
 });
 
-app.use(express.json());
+// Test Route
+app.get('/test', (req, res) => {
+    res.json({ message: 'Test route working' });
+});
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.log(err));
+// Root Route
+app.get('/', (req, res) => {
+    res.json({ message: 'Backend API running' });
+});
 
+// Mount Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 
-app.get('/', (req,res)=>{
-    res.send('Backend API running.....')
-})
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error('Unhandled Error:', err);
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
+});
 
-app.listen(5000, ()=> console.log('server is running at 5000'));
+// Connect to MongoDB and start server
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+    console.error('MONGO_URI is not defined in environment variables');
+    process.exit(1);
+}
+
+mongoose.connect(MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
+.then(() => {
+    console.log('✅ MongoDB connected successfully');
+    const PORT = process.env.PORT || 5050;
+    app.listen(PORT, () => {
+        console.log(`🚀 Server running at http://localhost:${PORT}`);
+    });
+})
+.catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+});
